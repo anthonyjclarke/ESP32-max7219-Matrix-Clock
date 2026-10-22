@@ -80,11 +80,28 @@ python3 scripts/check_display_logic.py
 
 ## Before the First Hardware Test
 
-1. Confirm that the board is a classic ESP32 compatible with `esp32dev`. An ESP32-S3 or another variant needs its own board configuration and suitable pins.
+1. Select the configuration for your board: `max7219-esp32-reg.yaml` for a classic ESP32 compatible with `esp32dev`, or `max7219-esp32c3-supermini.yaml` for the alternative C3 SuperMini described below. Other variants need their own board configuration and suitable pins.
 2. Confirm that the display has 12 chained MAX7219 8×8 modules, matching `num_chips: 12` and the 96×8 drawing coordinates.
-3. Check the regulated 5 V supply, current capacity, shared ground, and logic-level requirements. Confirm `GPIO26` → `CLK`, `GPIO27` → `DIN`, and `GPIO25` → `CS` against the actual hardware.
+3. Check the regulated 5 V supply, current capacity, shared ground, and logic-level requirements. For the classic ESP32, confirm `GPIO26` → `CLK`, `GPIO27` → `DIN`, and `GPIO25` → `CS`. For the C3 alternative, use `GPIO6` → `CLK`, `GPIO7` → `DIN`, and `GPIO10` → `CS`, with level buffering as described in the README.
 4. Enter your Wi-Fi and API/OTA credentials and choose the Home Assistant temperature entity. The clock needs network access for SNTP; temperature requires the Home Assistant API connection.
 5. Set the `timezone` entry under `time` for your location. The original default is `Europe/Berlin`; `Australia/Sydney` is suitable for Sydney. Weekday abbreviations remain German.
 6. After flashing, check module rotation/order, clock and date readability, temperature, all text modes, daytime brightness, night blanking, and power off/on. Use `rotate_chip`, `reverse_enable`, or `flip_x` if required by your module orientation.
 
 The software is ready for a hardware trial after these installation values are configured. Correct wiring, supply quality, physical display orientation, network connectivity, and behaviour on the actual device remain unverified until that trial.
+
+---
+
+## ESP32-C3 SuperMini Alternative
+
+Added on 23 October 2026. The alternative `max7219-esp32c3-supermini.yaml` includes the classic configuration as a local package and overrides the board/variant, device name, SPI/display pins, native USB logging, and fallback hotspot name. The display lambda and Home Assistant entities are shared. See the [C3 setup instructions](./README.md#alternative-device-esp32-c3-supermini) for wiring and installation.
+
+The display logic simulation passes with the shared rendering code. Static YAML checks also pass for syntax, the local include path, the display extension target, C3 board/pin assignments, and the original ESP32 defaults. These checks do not validate the ESPHome package merge, C3 toolchain, USB interface, or physical display operation. ESPHome is not installed in the current editing environment, so C3 configuration validation and firmware compilation have not been run. The successful classic ESP32 build and memory figures above are historical results for that target, not C3 results.
+
+Before the C3 hardware trial, configure your secrets and run:
+
+```sh
+esphome config max7219-esp32c3-supermini.yaml
+esphome compile max7219-esp32c3-supermini.yaml
+```
+
+Physical checks remain pending: USB flashing/logging, Wi-Fi and Home Assistant connection, display orientation and all rendering modes, brightness/night blanking, cold boot from the intended supply, and OTA updates.

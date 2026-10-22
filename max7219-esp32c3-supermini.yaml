@@ -1,0 +1,41 @@
+################################################################################
+# Alternative device: ESP32-C3 SuperMini with a 12-module MAX7219 chain (96x8).
+# Hardware testing is pending. See the ESP32-C3 SuperMini section in README.md.
+# Keep this file beside max7219-esp32-reg.yaml, secrets.yaml, and fonts/.
+# Compile and flash THIS file for the C3, using your own secrets.
+################################################################################
+
+# Reuse the clock logic, entities, fonts, and network settings.
+# ESPHome merges these overrides into the included configuration by component ID.
+packages:
+  clock: !include max7219-esp32-reg.yaml
+
+esphome:
+  name: max7219-esp32c3-supermini
+  friendly_name: MAX7219 ESP32-C3 SuperMini
+
+esp32:
+  # Override the inherited classic ESP32 board as well as selecting the C3 variant.
+  # This generic C3 target assumes the usual 4 MB SuperMini; check your board.
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: arduino
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+
+# Wire these signals through a 3.3 V -> 5 V buffer unless the display includes one.
+# Supply the matrix directly from a suitable regulated 5 V source; share ground.
+# Avoid boot strapping GPIO2/8/9 and native USB GPIO18/19 for display wiring.
+spi:
+  clk_pin: GPIO6
+  mosi_pin: GPIO7
+
+display:
+  - id: !extend max_display
+    cs_pin: GPIO10
+
+wifi:
+  ap:
+    ssid: "Max7219-C3-SuperMini"

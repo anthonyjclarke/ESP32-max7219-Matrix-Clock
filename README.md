@@ -31,6 +31,39 @@ The display uses a chain of 12 MAX7219 8×8 modules, giving a total resolution o
 | `GPIO27`   | `DIN / MOSI`           | SPI data         |
 | `GPIO25`   | `CS / LOAD`            | Chip select      |
 
+### Alternative Device: ESP32-C3 SuperMini
+
+The ESP32-C3 SuperMini is an alternative to the classic ESP32. Use [`max7219-esp32c3-supermini.yaml`](./max7219-esp32c3-supermini.yaml) for this board. **C3 firmware compilation and physical hardware testing are pending**; the earlier successful firmware build described in the validation notes applies to the classic ESP32 only.
+
+The C3 configuration includes the original clock YAML as an [ESPHome package](https://esphome.io/components/packages/) and overrides the processor, device name, display pins, USB logging, and fallback hotspot name. It retains the same 12-module display, fonts, animations, and Home Assistant controls. The generic `esp32-c3-devkitm-1` build target assumes a typical 4 MB SuperMini; check the flash size and pin labels on your board. Arduino is supported on the C3; a framework migration is not required. See the [ESPHome ESP32 documentation](https://esphome.io/components/esp32/).
+
+| ESP32-C3 SuperMini connection | MAX7219 connection | Description |
+| ---------------------------- | ------------------ | ----------- |
+| `GPIO6` | `CLK` | SPI clock, through level buffer |
+| `GPIO7` | `DIN / MOSI` | SPI data, through level buffer |
+| `GPIO10` | `CS / LOAD` | Chip select, through level buffer |
+| `GND` | `GND` | Shared ground with the display supply |
+| External regulated `5 V` supply | `VCC` | Power the matrix directly |
+
+The original GPIO25/26/27 assignments cannot be used on the C3. The replacement pins avoid boot strapping GPIO2/8/9 and native USB GPIO18/19. See [Espressif's GPIO restrictions](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c3/api-reference/peripherals/gpio.html).
+
+**Power and signal levels:** size the 5 V supply for the complete display chain and avoid routing its current through the SuperMini. For the first test, the SuperMini can be powered separately over USB with its ground connected to the display ground. Unless your matrix already includes level conversion, buffer all three signals from 3.3 V to 5 V, for example with a [74AHCT125](https://www.ti.com/product/SN74AHCT125) powered at 5 V, with the used output-enable inputs held low and a 100 nF bypass capacitor across its supply. The [MAX7219 datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/MAX7219-MAX7221.pdf) specifies a minimum logic-high input of 3.5 V; direct 3.3 V drive is outside that guarantee.
+
+To install on the C3:
+
+1. Copy **both** device YAML files and the `fonts/` directory into `/config/esphome/`, keeping the filenames and relative paths intact. The C3 file depends on `max7219-esp32-reg.yaml`; do not paste the C3 file alone without its included file.
+2. Configure `secrets.yaml` as described below. Set the temperature sensor entity and time zone in the included `max7219-esp32-reg.yaml`. These settings are shared by both board configurations; the default time zone remains `Europe/Berlin`.
+3. Open or create the device named `max7219-esp32c3-supermini` in Device Builder and use the contents of the C3 file. Select this device for validation, compilation, and installation. The classic ESP32 firmware cannot be reused on the C3.
+4. Flash over USB for the first installation. If it fails to connect, hold **BOOT**, press and release **RESET**, then release **BOOT** and retry. If the board remains in download mode after flashing, press **RESET** again without holding **BOOT**. See [Espressif's boot instructions](https://docs.espressif.com/projects/esptool/en/latest/esp32c3/advanced-topics/boot-mode-selection.html).
+5. Check USB logs, Wi-Fi, Home Assistant connectivity, display orientation, clock/date/temperature, text modes, brightness, and night blanking. Test a cold start from the intended power supply and an OTA update after Wi-Fi is working.
+
+The alternative configuration explicitly selects native `USB_SERIAL_JTAG` logging, which [ESPHome supports on the C3](https://esphome.io/components/logger/). Validate and compile with your own credentials before flashing:
+
+```sh
+esphome config max7219-esp32c3-supermini.yaml
+esphome compile max7219-esp32c3-supermini.yaml
+```
+
 ---
 
 ## 💖 Support the Original Author
@@ -41,7 +74,7 @@ Enjoying the project? [Buy the original author, OlLiLe18, a coffee via PayPal](h
 
 ## 🚀 Installation with ESPHome Device Builder
 
-Use the ESPHome dashboard in Home Assistant to set up the clock.
+Use the ESPHome dashboard in Home Assistant to set up the clock. The steps below use the classic ESP32 configuration; for the C3, follow the [alternative device instructions](#alternative-device-esp32-c3-supermini) above.
 
 ### 1. Install the Fonts
 
@@ -49,15 +82,49 @@ Download `basis33.ttf` and `pixelmix.ttf` from the [`fonts/`](./fonts/) director
 
 ### 2. Set Up Wi-Fi and Credentials
 
-Copy [`secrets.example.yaml`](./secrets.example.yaml) to `secrets.yaml` beside the device YAML and replace every example value. If you already have a shared `secrets.yaml` in Home Assistant, merge these entries into it instead of replacing the file. In the ESPHome dashboard, use the three-dot menu **⋮** → **Secrets** to edit that file.
+If you do not already have an ESPHome `secrets.yaml`, copy [`secrets.example.yaml`](./secrets.example.yaml) to `secrets.yaml` beside the device YAML and replace every example value. If you already have one, keep it and use its existing secret names as described below; add only the credentials that are missing. Open **Secrets** in the ESPHome dashboard to edit that file (depending on the dashboard version, this may be in the three-dot menu **⋮**).
 
-Set `wifi_ssid`, `wifi_password`, `api_encryption_key`, `ota_password`, and `fallback_ap_password`. Generate a unique API encryption key using:
+The supplied configuration uses `wifi_ssid`, `wifi_password`, `api_encryption_key`, `ota_password`, and `fallback_ap_password`. If you need a new API encryption key, generate one using:
 
 ```sh
 openssl rand -base64 32
 ```
 
 The device YAML reads these values using `!secret`. Keep `secrets.yaml` private; it is excluded from Git. The API key example intentionally requires replacement before validation or installation.
+
+#### Using an Existing ESPHome Secrets File
+
+**Use the names already defined in your ESPHome `secrets.yaml`.** Update the corresponding `!secret` references in `max7219-esp32-reg.yaml` to match those names exactly, including case. These references also apply to the C3 configuration because it includes that file. Preserve existing entries used by other devices.
+
+For example, if your existing secrets file defines `esphome_encryption_key`, change the clock's API configuration from `key: !secret api_encryption_key` to:
+
+```yaml
+api:
+  encryption:
+    key: !secret esphome_encryption_key
+```
+
+Keep your existing valid key value in `secrets.yaml`; you do not need to rename or duplicate it. Apply the same matching rule to Wi-Fi SSID/password, OTA password, and fallback hotspot password references. Choose entries that contain the appropriate credential for each setting, and add a new secret only where one is needed.
+
+#### Folder Layout and Missing Secrets
+
+Some Home Assistant editors show the configuration directory as `homeassistant/`. If your files appear under `homeassistant/esphome/` and ESPHome logs show `/config/esphome/`, use the ESPHome folder identified by those logs. For the C3, the layout should be:
+
+```text
+homeassistant/esphome/          # ESPHome sees this as /config/esphome/
+├── max7219-esp32c3-supermini.yaml
+├── max7219-esp32-reg.yaml
+├── secrets.yaml
+└── fonts/
+    ├── basis33.ttf
+    └── pixelmix.ttf
+```
+
+An error such as `Error including file 'max7219-esp32-reg.yaml': Secret 'api_encryption_key' not defined` means ESPHome found the included YAML but could not resolve that secret. It occurs while reading the configuration, before firmware compilation or upload.
+
+Open ESPHome's **Secrets** editor, or edit `homeassistant/esphome/secrets.yaml`, and ensure every `!secret` reference in the device configuration matches an entry in that file. If your existing secret uses a different name, update the reference as described above. The names are case-sensitive and must be top-level keys, without an enclosing `api:`, `wifi:`, or `secrets:` section. For a new secrets file using the template names, the encryption entry is `api_encryption_key: "YOUR_GENERATED_KEY"`; replace `YOUR_GENERATED_KEY` with the output of `openssl rand -base64 32` above, or the encryption key generated by the ESPHome device wizard.
+
+Uploading only `secrets.example.yaml` does not configure secrets. The file must be named `secrets.yaml` in the ESPHome folder; `homeassistant/secrets.yaml` at the parent level is a separate Home Assistant secrets file and is not automatically used here. Save the ESPHome secrets file, then validate or install `max7219-esp32c3-supermini.yaml` again. See [ESPHome's secrets documentation](https://esphome.io/guides/yaml/).
 
 ### 3. Create the Device and Paste the YAML
 
