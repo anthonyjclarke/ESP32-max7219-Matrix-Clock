@@ -1,2 +1,8 @@
 secrets.yaml
 .esphome/
+
+# Local contribution preparation
+/docs/FORK_CHANGES.md
+/docs/PULL_REQUEST_GUIDE.md
+/docs/PULL_REQUEST_DESCRIPTION.md
+.DS_Store

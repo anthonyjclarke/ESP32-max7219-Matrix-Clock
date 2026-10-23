@@ -203,7 +203,3 @@ python3 scripts/check_runtime_settings.py
 ```
 
 These compare the actual timezone helper and ESPHome converter with Python's timezone database, and exercise the sensor binding and apply/restart lambdas without hardware.
-
-## Fork Changes and Contributing Upstream
-
-See the [changes since the fork](./docs/FORK_CHANGES.md) for the firmware fixes, C3 support, runtime controls, date/language changes, and validation limits. To propose these changes to the original project, follow the [first pull request guide](./docs/PULL_REQUEST_GUIDE.md) and use the [suggested PR title and description](./docs/PULL_REQUEST_DESCRIPTION.md).
