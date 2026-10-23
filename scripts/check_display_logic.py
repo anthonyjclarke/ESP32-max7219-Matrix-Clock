@@ -23,12 +23,12 @@ harness = r'''
 constexpr bool COLOR_OFF = false;
 constexpr bool COLOR_ON = true;
 enum class TextAlign { TOP_CENTER, TOP_LEFT, CENTER_LEFT };
-struct Time { int hour=12, minute=0, second=0, day_of_week=1, day_of_month=22, month=10; bool valid=true; bool is_valid() const { return valid; } };
+struct Time { int hour=12, minute=0, second=0, day_of_week=1, day_of_month=22, month=10, year=2026; bool valid=true; bool is_valid() const { return valid; } };
 struct Clock { Time value; Time now() const { return value; } } sntp_time;
 struct Schedule { Time value; Time state_as_esptime() const { return value; } } night_mode_start, night_mode_end;
 struct Switch { bool state=true; } night_mode_enabled, display_power, show_date_enabled;
 struct Number { float state=3; } display_brightness, night_brightness;
-struct Select { std::string value; std::string current_option() const { return value; } } display_page, text_animation;
+struct Select { std::string value; std::string current_option() const { return value; } } display_page, text_animation, weekday_language;
 struct Text { std::string state; } display_text;
 struct Sensor { float state=21.5; bool valid=true; bool has_state() const { return valid; } } temp_sensor;
 int font_pixelmix=0, digit_font_basis=1, digit_font_basis15=2;
@@ -64,6 +64,7 @@ void reset() {
  time_sync_done=true; current_applied_intensity=-1; anim_frame=0;
  text_anim_pos=0; text_anim_dir=1; active_smiley=0; icon_anim_phase=false;
  display_page.value="Clock"; text_animation.value="Scroll"; display_text.state="";
+ weekday_language.value="German";
  temp_sensor.valid=true; temp_sensor.state=21.5;
 }
 int main() {
@@ -93,7 +94,18 @@ int main() {
  }
  for(int sec=0; sec<60; sec++) {
    reset(); sntp_time.value.second=sec; Display frame; render(frame);
-   assert(frame.text[0].find("22.10.")!=std::string::npos ? (sec>=50 && sec<=55) : !(sec>=50 && sec<=55));
+   assert((frame.text[0]=="SO 22.10.2026") == (sec>=50 && sec<=55));
+ }
+ // Change language on the running date page: Sunday=1 through Saturday=7.
+ reset(); sntp_time.value.second=50;
+ const char* german[]={"SO", "MO", "DI", "MI", "DO", "FR", "SA"};
+ const char* english[]={"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
+ for(int day=1; day<=7; day++) {
+   sntp_time.value.day_of_week=day;
+   weekday_language.value="German"; Display de; render(de);
+   assert(de.text[0]==std::string(german[day-1])+" 22.10.2026");
+   weekday_language.value="English"; Display en; render(en);
+   assert(en.text[0]==std::string(english[day-1])+" 22.10.2026");
  }
  reset(); sntp_time.value.valid=false; Display unsynced; render(unsynced); assert(unsynced.text[0]=="SYNC...");
  reset(); temp_sensor.state=std::numeric_limits<float>::quiet_NaN(); Display missing; render(missing); assert(missing.text.back()=="--.-°");
@@ -103,7 +115,7 @@ int main() {
  }
  reset(); display_page.value="Text"; Display empty; render(empty); assert(empty.text[0]=="-");
  display_text.state="Hello"; Display short_text; render(short_text); assert(short_text.text[0]=="Hello");
- std::puts("PASS: brightness writes/cache, day/night boundaries (2,880 minutes), power transitions, all 14 icon frames, date timing, invalid time/temperature, empty/short text, and all four text modes (8,000 frames).");
+ std::puts("PASS: brightness writes/cache, day/night boundaries (2,880 minutes), power transitions, all 14 icon frames, date timing/year, all seven weekdays in German/English with live switching, invalid time/temperature, empty/short text, and all four text modes (8,000 frames).");
 }
 '''
 compiler = shutil.which('clang++') or shutil.which('g++')

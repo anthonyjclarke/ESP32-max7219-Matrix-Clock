@@ -7,9 +7,30 @@
 #  - Framework: Arduino
 ################################################################################
 
+# Defaults are used only until a setting has been saved on the device.
+substitutions:
+  default_timezone: "Europe/Berlin"
+  default_temperature_entity: "sensor.aussenthermometer_temperature"
+
 esphome:
   name: max7219-esp32-reg
   friendly_name: MAX7219-ESP32-REG
+  min_version: 2026.9.1
+  includes:
+    - clock_settings.h
+  on_boot:
+    # Text restores at priority 800; bind the stable entity string before the
+    # Home Assistant sensor subscribes at priority 100. Never mutate it later.
+    - priority: 300
+      then:
+        - lambda: |-
+            if (matrix_clock::valid_temperature_entity(id(temperature_entity).state)) {
+              id(active_temperature_entity) = id(temperature_entity).state;
+            } else {
+              id(active_temperature_entity) = "${default_temperature_entity}";
+              ESP_LOGW("clock.settings", "Invalid saved temperature entity; using the default");
+            }
+            id(temp_sensor).set_entity_id(id(active_temperature_entity).c_str());
 
 esp32:
   board: esp32dev
@@ -46,6 +67,11 @@ datetime:
 #  Global variables
 ################################################################################
 globals:
+  # This owns the subscription's entity string for the entire boot.
+  - id: active_temperature_entity
+    type: std::string
+    initial_value: '""'
+
   # Time synchronisation successful?
   - id: time_sync_done
     type: bool
@@ -87,6 +113,51 @@ globals:
 ################################################################################
 select:
   - platform: template
+    name: "Time Zone"
+    id: clock_timezone
+    entity_category: config
+    options:
+      - "UTC"
+      - "Europe/Berlin"
+      - "Europe/London"
+      - "Australia/Sydney"
+      - "Australia/Melbourne"
+      - "Australia/Brisbane"
+      - "Australia/Adelaide"
+      - "Australia/Darwin"
+      - "Australia/Perth"
+      - "Australia/Hobart"
+      - "Australia/Lord_Howe"
+      - "Pacific/Auckland"
+      - "America/New_York"
+      - "America/Chicago"
+      - "America/Denver"
+      - "America/Los_Angeles"
+      - "Asia/Tokyo"
+      - "Asia/Singapore"
+      - "Asia/Kolkata"
+    initial_option: "${default_timezone}"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            if (!matrix_clock::apply_timezone(x)) {
+              ESP_LOGW("clock.settings", "Unsupported time zone: %s", x.c_str());
+            }
+
+  - platform: template
+    name: "Weekday Language"
+    id: weekday_language
+    entity_category: config
+    options:
+      - "German"
+      - "English"
+    initial_option: "German"
+    optimistic: true
+    restore_value: true
+
+  - platform: template
     name: "Text Animation"
     id: text_animation
     options:
@@ -114,7 +185,9 @@ select:
 time:
   - platform: sntp
     id: sntp_time
-    timezone: "Europe/Berlin"
+    # Enable timezone support; the saved Time Zone selector applies the actual
+    # zone during setup and on every selection change (including DST rules).
+    timezone: "UTC"
     on_time_sync:
       then:
         lambda: |-
@@ -124,6 +197,18 @@ time:
 #  Text input
 ################################################################################
 text:
+  - platform: template
+    name: "Temperature Entity"
+    id: temperature_entity
+    entity_category: config
+    optimistic: true
+    initial_value: "${default_temperature_entity}"
+    min_length: 8
+    max_length: 100
+    pattern: 'sensor[.][a-z0-9_]+'
+    mode: text
+    restore_value: true
+
   - platform: template
     name: "Display Text"
     id: display_text
@@ -210,7 +295,30 @@ font:
 sensor:
   - platform: homeassistant
     id: temp_sensor
-    entity_id: sensor.aussenthermometer_temperature
+    # Startup overrides this from the saved Temperature Entity setting.
+    entity_id: "${default_temperature_entity}"
+
+################################################################################
+#  Apply the saved temperature source
+################################################################################
+# The native HA subscription is registered once per boot. Flush pending settings
+# before restarting so an entity change works even just after pressing Save.
+button:
+  - platform: template
+    name: "Apply Sensor (Restart)"
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            if (!matrix_clock::valid_temperature_entity(id(temperature_entity).state)) {
+              ESP_LOGW("clock.settings", "Enter a sensor.entity_id before applying");
+              return;
+            }
+            if (!global_preferences->sync()) {
+              ESP_LOGE("clock.settings", "Settings could not be saved; restart cancelled");
+              return;
+            }
+            App.safe_reboot();
 
 ################################################################################
 #  Intervals
@@ -359,11 +467,14 @@ display:
       bool show_date = id(show_date_enabled).state && (now.second >= 50 && now.second <= 55);
 
       if (show_date) {
-        // 3.A DATE DISPLAY (e.g. "SO 23.08.", using German weekday abbreviations)
-        static const char* const WAYS[7] = { "SO", "MO", "DI", "MI", "DO", "FR", "SA" };
+        // 3.A DATE DISPLAY (e.g. "SO 23.08.2026" or "SU 23.08.2026")
+        static const char* const DAYS_DE[7] = { "SO", "MO", "DI", "MI", "DO", "FR", "SA" };
+        static const char* const DAYS_EN[7] = { "SU", "MO", "TU", "WE", "TH", "FR", "SA" };
         int wday_idx = (now.day_of_week - 1 + 7) % 7;
+        const char* weekday = id(weekday_language).current_option() == "English"
+          ? DAYS_EN[wday_idx] : DAYS_DE[wday_idx];
 
-        it.printf(4, 0, id(font_pixelmix), TextAlign::TOP_LEFT, "%s %02d.%02d.", WAYS[wday_idx], now.day_of_month, now.month);
+        it.printf(4, 0, id(font_pixelmix), TextAlign::TOP_LEFT, "%s %02d.%02d.%04d", weekday, now.day_of_month, now.month, now.year);
 
         // Animated calendar icon 📅 at the far right, X=87
         static const uint8_t CAL_ICON[2][8] = {

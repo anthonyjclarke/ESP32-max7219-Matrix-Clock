@@ -1,7 +1,7 @@
 ################################################################################
 # Alternative device: ESP32-C3 SuperMini with a 12-module MAX7219 chain (96x8).
 # Hardware testing is pending. See the ESP32-C3 SuperMini section in README.md.
-# Keep this file beside max7219-esp32-reg.yaml, secrets.yaml, and fonts/.
+# Keep this beside max7219-esp32-reg.yaml, clock_settings.h, secrets.yaml, fonts/.
 # Compile and flash THIS file for the C3, using your own secrets.
 ################################################################################
 
